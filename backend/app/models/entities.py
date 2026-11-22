@@ -38,6 +38,13 @@ class User(Base):
     job_applications = relationship("JobApplication", back_populates="user", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="user", cascade="all, delete-orphan")
     conversations = relationship("Conversation", back_populates="user", cascade="all, delete-orphan")
+    cyber_checklists = relationship("CyberChecklist", back_populates="user", cascade="all, delete-orphan")
+    security_findings = relationship("SecurityFinding", back_populates="user", cascade="all, delete-orphan")
+    reminders = relationship("Reminder", back_populates="user", cascade="all, delete-orphan")
+    audit_logs = relationship("AuditLog", back_populates="user", cascade="all, delete-orphan")
+    # Knowledge Graph nodes and edges
+    knowledge_nodes = relationship("KnowledgeNode", back_populates="user", cascade="all, delete-orphan")
+    knowledge_edges = relationship("KnowledgeEdge", back_populates="user", cascade="all, delete-orphan")
 
 # ----------------- MONETIZATION & WALLET -----------------
 class SubscriptionPlan(Base):
@@ -119,7 +126,9 @@ class Memory(Base):
     content = Column(Text, nullable=False)
     source = Column(String(100), default="user_chat")
     confidence_score = Column(Float, default=1.0)
-    is_active = Column(Boolean, default=True, nullable=False)
+    embedding = Column(JSON, nullable=True)  # local vector embedding
+
+    consent_given = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
@@ -255,6 +264,8 @@ class JobApplication(Base):
     applied_date = Column(DateTime, nullable=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=utc_now)
+    interview_date = Column(DateTime, nullable=True)
+    follow_up_date = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="job_applications")
     opportunity = relationship("JobOpportunity")
@@ -314,3 +325,171 @@ class AIUsageLog(Base):
     total_tokens = Column(Integer, default=0)
     estimated_cost_usd = Column(Float, default=0.0)
     created_at = Column(DateTime, default=utc_now)
+
+# ----------------- LEARNING HUB -----------------
+class LearningTopic(Base):
+    __tablename__ = "learning_topics"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    level = Column(String(20), default="beginner")  # beginner, intermediate, advanced
+    resource_url = Column(Text, nullable=True)  # verified link if any
+    created_at = Column(DateTime, default=utc_now)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    user = relationship("User", back_populates="learning_topics")
+    progress_entries = relationship("LearningProgress", back_populates="topic", cascade="all, delete-orphan")
+    quizzes = relationship("Quiz", back_populates="topic", cascade="all, delete-orphan")
+
+class LearningProgress(Base):
+    __tablename__ = "learning_progress"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    topic_id = Column(String(36), ForeignKey("learning_topics.id"), nullable=False)
+    completed = Column(Boolean, default=False)
+    completion_date = Column(DateTime, nullable=True)
+    progress_percent = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=utc_now)
+    user = relationship("User", back_populates="learning_progress")
+    topic = relationship("LearningTopic", back_populates="progress_entries")
+
+class Quiz(Base):
+    __tablename__ = "quizzes"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    topic_id = Column(String(36), ForeignKey("learning_topics.id"), nullable=False)
+    title = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=utc_now)
+    topic = relationship("LearningTopic", back_populates="quizzes")
+    questions = relationship("QuizQuestion", back_populates="quiz", cascade="all, delete-orphan")
+
+class QuizQuestion(Base):
+    __tablename__ = "quiz_questions"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    quiz_id = Column(String(36), ForeignKey("quizzes.id"), nullable=False)
+    question_text = Column(Text, nullable=False)
+    options = Column(JSON, default=list)  # list of strings
+    correct_option = Column(Integer, nullable=False)  # index of correct option
+    quiz = relationship("Quiz", back_populates="questions")
+
+class QuizAnswer(Base):
+    __tablename__ = "quiz_answers"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
+    question_id = Column(String(36), ForeignKey("quiz_questions.id"), nullable=False)
+    selected_option = Column(Integer, nullable=False)
+    is_correct = Column(Boolean, nullable=False)
+    answered_at = Column(DateTime, default=utc_now)
+    user = relationship("User", back_populates="quiz_answers")
+    question = relationship("QuizQuestion")
+
+# ----------------- CYBER HUB -----------------
+
+# Knowledge Graph models
+class KnowledgeNode(Base):
+    __tablename__ = "knowledge_nodes"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    label = Column(String(255), nullable=False)
+    type = Column(String(50), nullable=False)  # e.g., "task", "document", "skill", etc.
+    metadata_json = Column(JSON, default=dict)  # optional extra data
+    created_at = Column(DateTime, default=utc_now)
+
+    user = relationship("User", back_populates="knowledge_nodes")
+    outgoing = relationship(
+        "KnowledgeEdge",
+        foreign_keys="KnowledgeEdge.source_node_id",
+        back_populates="source_node",
+        cascade="all, delete-orphan",
+    )
+    incoming = relationship(
+        "KnowledgeEdge",
+        foreign_keys="KnowledgeEdge.target_node_id",
+        back_populates="target_node",
+        cascade="all, delete-orphan",
+    )
+
+class KnowledgeEdge(Base):
+    __tablename__ = "knowledge_edges"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    source_node_id = Column(String(36), ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), nullable=False)
+    target_node_id = Column(String(36), ForeignKey("knowledge_nodes.id", ondelete="CASCADE"), nullable=False)
+    relationship_type = Column(String(100), nullable=False)  # e.g., "depends_on", "related_to"
+    created_at = Column(DateTime, default=utc_now)
+
+    user = relationship("User", back_populates="knowledge_edges")
+    source_node = relationship("KnowledgeNode", foreign_keys=[source_node_id], back_populates="outgoing")
+    target_node = relationship("KnowledgeNode", foreign_keys=[target_node_id], back_populates="incoming")
+from sqlalchemy import Enum as SqlEnum
+import enum
+
+class CyberFindingSeverity(enum.Enum):
+    low = "low"
+    medium = "medium"
+    high = "high"
+    critical = "critical"
+
+class CyberFindingStatus(enum.Enum):
+    open = "open"
+    in_progress = "in_progress"
+    resolved = "resolved"
+    dismissed = "dismissed"
+
+class CyberChecklist(Base):
+    __tablename__ = "cyber_checklists"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    # JSON list of items: each item dict {name:str, description:str, completed:bool}
+    items = Column(JSON, default=list)
+    score = Column(Float, default=0.0)  # estimate 0-100
+    created_at = Column(DateTime, default=utc_now)
+
+    user = relationship("User", back_populates="cyber_checklists")
+
+class SecurityFinding(Base):
+    __tablename__ = "security_findings"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    severity = Column(SqlEnum(CyberFindingSeverity), default=CyberFindingSeverity.low, nullable=False)
+    status = Column(SqlEnum(CyberFindingStatus), default=CyberFindingStatus.open, nullable=False)
+    remediation = Column(Text, nullable=True)
+    is_simulated = Column(Boolean, default=True, nullable=False)  # true unless user uploads verified scan
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    user = relationship("User", back_populates="security_findings")
+    project = relationship("Project", back_populates="security_findings")
+
+class LearningModule(Base):
+    __tablename__ = "learning_modules"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    title = Column(String(255), nullable=False)
+    category = Column(String(100), nullable=False)  # e.g., "phishing", "auth", "secure_coding"
+    content = Column(Text, nullable=False)  # markdown content
+    resource_url = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    action = Column(String(100), nullable=False)
+    target_type = Column(String(50), nullable=True)  # e.g., "user", "subscription"
+    target_id = Column(String(36), nullable=True)
+    details = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=utc_now)
+
+    user = relationship("User", back_populates="audit_logs")

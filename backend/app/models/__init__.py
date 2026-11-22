@@ -9,5 +9,5 @@ __all__ = [
     "User", "SubscriptionPlan", "Subscription", "Wallet", "WalletTransaction", "PaymentOrder",
     "Memory", "Task", "Habit", "CareerProfile", "UserSkill", "Project",
     "Resume", "ResumeVersion", "JobOpportunity", "JobApplication",
-    "Document", "Conversation", "Message", "AIUsageLog"
+    "Document", "Conversation", "Message", "AIUsageLog", "AuditLog"
 ]
