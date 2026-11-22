@@ -41,6 +41,9 @@ class User(Base):
     cyber_checklists = relationship("CyberChecklist", back_populates="user", cascade="all, delete-orphan")
     security_findings = relationship("SecurityFinding", back_populates="user", cascade="all, delete-orphan")
     reminders = relationship("Reminder", back_populates="user", cascade="all, delete-orphan")
+    learning_topics = relationship("LearningTopic", back_populates="user", cascade="all, delete-orphan")
+    learning_progress = relationship("LearningProgress", back_populates="user", cascade="all, delete-orphan")
+    quiz_answers = relationship("QuizAnswer", back_populates="user", cascade="all, delete-orphan")
     audit_logs = relationship("AuditLog", back_populates="user", cascade="all, delete-orphan")
     # Knowledge Graph nodes and edges
     knowledge_nodes = relationship("KnowledgeNode", back_populates="user", cascade="all, delete-orphan")
@@ -164,6 +167,19 @@ class Habit(Base):
 
     user = relationship("User", back_populates="habits")
 
+class Reminder(Base):
+    __tablename__ = "reminders"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    remind_at = Column(DateTime, nullable=True)
+    is_completed = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=utc_now)
+
+    user = relationship("User", back_populates="reminders")
+
 # ----------------- CAREEROS & RESUME -----------------
 class CareerProfile(Base):
     __tablename__ = "career_profiles"
@@ -208,6 +224,7 @@ class Project(Base):
     created_at = Column(DateTime, default=utc_now)
 
     user = relationship("User", back_populates="projects")
+    security_findings = relationship("SecurityFinding", back_populates="project")
 
 class Resume(Base):
     __tablename__ = "resumes"
