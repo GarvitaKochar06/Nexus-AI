@@ -20,3 +20,45 @@ def create_access_token(subject: Union[str, Any], expires_delta: Optional[timede
     to_encode = {"exp": expire, "sub": str(subject)}
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+from app.core.database import get_db
+from app.models.entities import User
+
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+) -> User:
+    auth_error = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or missing authentication token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    if credentials is None:
+        raise auth_error
+
+    try:
+        payload = jwt.decode(
+            credentials.credentials,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+        )
+        user_id = payload.get("sub")
+
+        if not isinstance(user_id, str) or not user_id:
+            raise auth_error
+
+    except JWTError:
+        raise auth_error
+
+    user = db.query(User).filter(User.id == user_id).first()
+
+    if user is None:
+        raise auth_error
+
+    return user

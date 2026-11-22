@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Header
 from fastapi.responses import StreamingResponse
 from app.core.security import get_current_user
 from app.core.ai_client import AIClient, SandboxAIClient
@@ -15,7 +15,7 @@ def get_ai_client() -> AIClient:
     return SandboxAIClient()
 
 @router.post("/completion", summary="Get AI completion (sandbox)")
-from fastapi import Header
+# Header imported at top – no inline import needed
 
 async def completion(
     prompt: str,

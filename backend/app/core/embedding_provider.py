@@ -25,4 +25,3 @@ class EmbeddingProvider(abc.ABC):
         `candidates` is a list of objects that have an `embedding` attribute.
         """
         pass
-}

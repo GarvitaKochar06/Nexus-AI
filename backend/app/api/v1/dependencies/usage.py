@@ -1,3 +1,4 @@
+from fastapi import Depends
 import uuid
 from sqlalchemy.orm import Session
 from datetime import datetime, date
