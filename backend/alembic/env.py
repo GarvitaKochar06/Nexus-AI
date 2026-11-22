@@ -20,6 +20,11 @@ from app.core.database import Base  # noqa: E402
 
 target_metadata = Base.metadata
 
+# Override DB URL with Render env var (fallback to local SQLite)
+import os
+db_url = os.getenv("DATABASE_URL", "sqlite:///../nexus_ai.db")
+config.set_main_option("sqlalchemy.url", db_url)
+
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
